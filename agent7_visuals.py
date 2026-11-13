@@ -1,26 +1,44 @@
 import json
 import os
-import time
 import urllib.parse
 import urllib.request
+from PIL import Image, ImageDraw, ImageFont
 
 OUTPUT_DIR = "output/visuals"
 VOICE_MANIFEST = "output/audio/voice_manifest.json"
-STYLE_SUFFIX = ", cinematic lighting, ultra detailed, digital art, clean composition, 8k resolution, no text, no watermark"
-POLLINATIONS_BASE = "https://pollinations.ai" + "/prompt/"
 
-def build_prompt_from_urdu(urdu_text, segment_id):
-    base = f"Scene {segment_id}: futuristic artificial intelligence technology, glowing blue and gold digital network, modern educational YouTube visual"
-    return urllib.parse.quote(base + STYLE_SUFFIX)
+SEARCH_TOPICS = [
+    "Artificial intelligence",
+    "Robotics technology",
+    "Computer network",
+    "Data center",
+    "Machine learning",
+    "Digital technology"
+]
 
-def download_ai_image(prompt_encoded, out_path, width=1280, height=720, seed=42):
-    url = f"{POLLINATIONS_BASE}{prompt_encoded}?width={width}&height={height}&seed={seed}&nologo=true"
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        data = resp.read()
-        with open(out_path, "wb") as f:
-            f.write(data)
-    return out_path
+def download_wikimedia_image(query, out_path):
+    encoded = urllib.parse.quote(query)
+    api_url = (
+        f"https://wikimedia.org"
+        f"&gsrsearch=filetype:bitmap+{encoded}&gsrnamespace=6&gsrlimit=5"
+        f"&prop=imageinfo&iiprop=url&iiurlwidth=1280&format=json"
+    )
+    req = urllib.request.Request(api_url, headers={"User-Agent": "AIWithAamirBot/1.0 (educational)"})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+        pages = data.get("query", {}).get("pages", {})
+        for _, page in pages.items():
+            info = page.get("imageinfo", [])
+            if info:
+                img_url = info[0].get("thumburl") or info[0].get("url")
+                if img_url and (img_url.lower().endswith(".jpg") or img_url.lower().endswith(".jpeg") or img_url.lower().endswith(".png")):
+                    ireq = urllib.request.Request(img_url, headers={"User-Agent": "AIWithAamirBot/1.0"})
+                    with urllib.request.urlopen(ireq, timeout=45) as iresp:
+                        with open(out_path, "wb") as f:
+                            f.write(iresp.read())
+                    if os.path.exists(out_path) and os.path.getsize(out_path) > 15000:
+                        return out_path
+    return None
 
 def search_pexels_video(query, api_key, out_path, orientation="landscape"):
     encoded_q = urllib.parse.quote(query)
@@ -31,23 +49,50 @@ def search_pexels_video(query, api_key, out_path, orientation="landscape"):
         videos = result.get("videos", [])
         if not videos:
             return None
-        files = videos.get("video_files", [])
+        files = videos[0].get("video_files", [])
         hd_files = [f for f in files if f.get("width", 0) >= 1280] or files
         if not hd_files:
             return None
-        video_url = hd_files["link"]
+        video_url = hd_files[0]["link"]
         vreq = urllib.request.Request(video_url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(vreq, timeout=60) as vresp:
             with open(out_path, "wb") as f:
                 f.write(vresp.read())
         return out_path
 
+def create_branded_slide(scene_num, width, height, out_path):
+    img = Image.new("RGB", (width, height), (12, 20, 38))
+    draw = ImageDraw.Draw(img)
+    # Gradient-style geometric accents
+    for step in range(0, height, 8):
+        shade = min(45, 12 + int((step / height) * 30))
+        draw.line([(0, step), (width, step)], fill=(shade, shade + 12, shade + 35), width=8)
+    draw.rectangle([(40, 40), (width - 40, height - 40)], outline=(218, 165, 32), width=4)
+    draw.ellipse([(width // 2 - 220, height // 2 - 220), (width // 2 + 220, height // 2 + 220)], outline=(56, 189, 248), width=3)
+
+    font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+    title_font = ImageFont.truetype(font_path, 58) if os.path.exists(font_path) else ImageFont.load_default()
+    sub_font = ImageFont.truetype(font_path, 32) if os.path.exists(font_path) else ImageFont.load_default()
+
+    brand = "AI WITH AAMIR"
+    bbox = draw.textbbox((0, 0), brand, font=title_font)
+    bw = bbox[2] - bbox[0]
+    draw.text(((width - bw) // 2, height // 2 - 50), brand, font=title_font, fill=(255, 215, 0))
+
+    label = f"SCENE {scene_num:02d}"
+    sbbox = draw.textbbox((0, 0), label, font=sub_font)
+    sw = sbbox[2] - sbbox[0]
+    draw.text(((width - sw) // 2, height // 2 + 30), label, font=sub_font, fill=(147, 197, 253))
+
+    img.save(out_path, "JPEG", quality=92)
+    return out_path
+
 def run_agent7(video_format="landscape"):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     if video_format == "shorts":
-        width, height, orientation = 720, 1280, "portrait"
+        width, height, orientation = 1080, 1920, "portrait"
     else:
-        width, height, orientation = 1280, 720, "landscape"
+        width, height, orientation = 1920, 1080, "landscape"
 
     if os.path.exists(VOICE_MANIFEST):
         with open(VOICE_MANIFEST, "r", encoding="utf-8") as f:
@@ -60,25 +105,29 @@ def run_agent7(video_format="landscape"):
 
     for seg in segments:
         sid = seg["segment_id"]
-        urdu_text = seg.get("urdu_text", "")
+        topic = SEARCH_TOPICS[(sid - 1) % len(SEARCH_TOPICS)]
         asset_path = None
         asset_type = "image"
 
         if pexels_key and sid % 2 == 0:
             try:
                 vid_file = os.path.join(OUTPUT_DIR, f"scene_{sid:03d}.mp4")
-                asset_path = search_pexels_video("artificial intelligence technology", pexels_key, vid_file, orientation)
+                asset_path = search_pexels_video(topic, pexels_key, vid_file, orientation)
                 if asset_path:
                     asset_type = "video"
             except Exception as e:
-                print(f"[Agent 7] Pexels fallback to AI image for scene {sid}: {e}")
+                print(f"[Agent 7] Pexels skipped for scene {sid}: {e}")
 
         if not asset_path:
             img_file = os.path.join(OUTPUT_DIR, f"scene_{sid:03d}.jpg")
-            prompt_enc = build_prompt_from_urdu(urdu_text, sid)
-            asset_path = download_ai_image(prompt_enc, img_file, width=width, height=height, seed=100 + sid)
-            asset_type = "image"
-            time.sleep(1)
+            try:
+                asset_path = download_wikimedia_image(topic, img_file)
+            except Exception as e:
+                print(f"[Agent 7] Wikimedia fallback for scene {sid}: {e}")
+
+        if not asset_path:
+            img_file = os.path.join(OUTPUT_DIR, f"scene_{sid:03d}.jpg")
+            asset_path = create_branded_slide(sid, width, height, img_file)
 
         visual_manifest.append({
             "segment_id": sid,
