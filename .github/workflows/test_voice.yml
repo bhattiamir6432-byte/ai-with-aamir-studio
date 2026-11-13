@@ -1,0 +1,35 @@
+name: Test Agent 6 Urdu Voice
+
+on:
+  workflow_dispatch:
+    inputs:
+      urdu_script:
+        description: 'Enter Urdu Script to Test'
+        required: false
+        default: 'السلام علیکم دوستو! AI With Aamir میں خوش آمدید۔ آج ہم سیکھیں گے کہ مصنوعی ذہانت سے یوٹیوب ویڈیوز کیسے بنائی جاتی ہیں۔'
+
+jobs:
+  generate-voice:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install free edge-tts
+        run: pip install edge-tts
+
+      - name: Run Agent 6 Urdu Voice Generator
+        env:
+          URDU_SCRIPT: ${{ github.event.inputs.urdu_script }}
+        run: python agent6_voice.py
+
+      - name: Upload Generated Urdu Audio Files
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent6-urdu-audio
+          path: output/audio/
