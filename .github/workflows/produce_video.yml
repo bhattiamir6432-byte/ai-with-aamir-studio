@@ -1,0 +1,70 @@
+name: AI With Aamir - Full Video Production
+
+on:
+  repository_dispatch:
+    types: [produce_youtube_video]
+  workflow_dispatch:
+    inputs:
+      video_title:
+        description: 'Video Title'
+        required: false
+        default: 'AI With Aamir - AI Se Paise Kamane Ke Tarike'
+      urdu_script:
+        description: 'Complete Urdu Script'
+        required: false
+        default: 'السلام علیکم دوستو! AI With Aamir میں خوش آمدید۔ آج کی ویڈیو میں ہم سیکھیں گے کہ مصنوعی ذہانت سے یوٹیوب ویڈیوز کیسے بنائی جاتی ہیں۔ یہ پورا سسٹم بالکل مفت کام کرتا ہے۔'
+      video_format:
+        description: 'Format: landscape or shorts'
+        required: false
+        default: 'landscape'
+
+jobs:
+  produce-video:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout studio repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install FFmpeg and Urdu Noto Fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-noto-core
+
+      - name: Install Python Libraries
+        run: pip install edge-tts pillow arabic-reshaper python-bidi
+
+      - name: Run Agent 6 - Pakistani Urdu Voice
+        env:
+          URDU_SCRIPT: ${{ github.event.client_payload.urdu_script || github.event.inputs.urdu_script }}
+        run: python agent6_voice.py
+
+      - name: Run Agent 7 - AI Visuals & Stock Clips
+        env:
+          VIDEO_FORMAT: ${{ github.event.client_payload.video_format || github.event.inputs.video_format }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+        run: python agent7_visuals.py
+
+      - name: Run Agent 8 & 9 - Video Editor, Urdu Subtitles & QC
+        env:
+          VIDEO_FORMAT: ${{ github.event.client_payload.video_format || github.event.inputs.video_format }}
+        run: python agent8_9_editor_qc.py
+
+      - name: Run Agent 10 - YouTube SEO & Private Upload
+        env:
+          VIDEO_TITLE: ${{ github.event.client_payload.video_title || github.event.inputs.video_title }}
+          SEO_TEXT: ${{ github.event.client_payload.seo_text }}
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+        run: python agent10_youtube.py
+
+      - name: Upload Final MP4 Video & Reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-with-aamir-final-video
+          path: output/final/
