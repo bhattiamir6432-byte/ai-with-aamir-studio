@@ -1,30 +1,35 @@
 import os
+import re
 import json
 import random
 import urllib.request
-import urllib.error
 from datetime import datetime
 
 DIFY_API_KEY = os.environ.get("DIFY_API_KEY", "").strip()
 MANUAL_TOPIC = os.environ.get("MANUAL_TOPIC", "").strip()
 HISTORY_FILE = "used_topics.json"
 
-TOPIC_POOL = [
-    "AI Se Ghar Baithe Paise Kamane Ke 5 Asan Tareeqe",
-    "ChatGPT Aur Free AI Tools Se Freelancing Kaise Shuru Karein",
-    "AI Video Editing Tools Jo Aapka Kaam 10 Guna Tez Kar Dein",
-    "Mobile Phone Par Free AI Apps Se Content Creation Kaise Karein",
-    "Future of AI in Pakistan: Naye Rozgar Aur Online Earning",
-    "AI Agents Kya Hain Aur Yeh Khud-ba-Khud Kaam Kaise Karte Hain",
-    "YouTube Automation With Free AI Tools Complete Guide in Urdu",
-    "AI Se Graphic Design Aur Thumbnail Banane Ke Best Free Tools",
-    "Artificial Intelligence Se English Seekhne Aur Bolne Ka Asan Tareeqa",
-    "Students Ke Liye 5 Behtareen Free AI Study Aur Research Tools",
-    "AI Voice Over Aur Text to Speech Tools Ki Haqeeqat",
-    "Small Business Ko AI Tools Se Grow Karne Ke Practical Tareeqe",
-    "Google Gemini Aur ChatGPT Mein Kya Farq Hai Konsa Behtar Hai",
-    "AI Se Resume Aur CV Banakar Online Job Hasil Karne Ka Tareeqa",
-    "Cyber Security Aur AI: Apne Online Accounts Ko Safe Kaise Rakhein"
+TOPIC_ITEMS = [
+    {
+        "title": "AI Se Ghar Baithe Paise Kamane Ke 5 Asan Tareeqe",
+        "urdu": "السلام علیکم دوستو! اے آئی ود عامر میں خوش آمدید۔ آج ہم بات کریں گے کہ آپ مصنوعی ذہانت یعنی اے آئی کی مدد سے گھر بیٹھے پیسے کیسے کما سکتے ہیں۔ سب سے پہلا طریقہ فری لانسنگ ہے جس میں آپ اے آئی ٹولز سے مضامین اور سکرپٹ لکھ کر کما سکتے ہیں۔ دوسرا طریقہ یوٹیوب آٹومیشن ہے جس میں آپ اے آئی وائس اور ویڈیوز بنا کر اپنا چینل چلا سکتے ہیں۔ تیسرا طریقہ گرافک ڈیزائننگ اور تھمب نیل بنانا ہے۔ اگر آپ روزانہ ایک نیا اے آئی ٹول سیکھیں تو بغیر کسی سرمایہ کاری کے بہترین آن لائن آمدنی حاصل کر سکتے ہیں۔ مزید معلومات کے لیے اے آئی ود عامر کو سبسکرائب ضرور کریں۔ شکریہ!"
+    },
+    {
+        "title": "ChatGPT Aur Free AI Tools Se Freelancing Kaise Shuru Karein",
+        "urdu": "السلام علیکم دوستو! اے آئی ود عامر میں خوش آمدید۔ آج کی ویڈیو میں ہم سیکھیں گے کہ چیٹ جی پی ٹی اور مفت اے آئی ٹولز استعمال کر کے فری لانسنگ کیسے شروع کی جائے۔ اگر آپ کے پاس کوئی پرانا تجربہ نہیں ہے تب بھی آپ اے آئی کی مدد سے ترجمہ، مواد کی تیاری اور سوشل میڈیا پوسٹس بنا کر کلائنٹس کو خدمات دے سکتے ہیں۔ بس آپ کو صحیح پرامپٹ لکھنا سیکھنا ہوگا تاکہ بہترین نتیجہ حاصل ہو سکے۔ محنت اور مستقل مزاجی سے آپ گھر بیٹھے کامیاب فری لانسر بن سکتے ہیں۔ ویڈیو پسند آئے تو چینل کو سبسکرائب کریں۔ شکریہ!"
+    },
+    {
+        "title": "AI Agents Kya Hain Aur Yeh Khud-ba-Khud Kaam Kaise Karte Hain",
+        "urdu": "السلام علیکم دوستو! اے آئی ود عامر میں خوش آمدید۔ کیا آپ جانتے ہیں کہ اے آئی ایجنٹس کیا ہوتے ہیں اور یہ انسانوں کی طرح خود بخود کام کیسے کرتے ہیں۔ عام چیٹ بوٹ صرف سوال کا جواب دیتا ہے لیکن اے آئی ایجنٹ خود سوچتا ہے، منصوبہ بناتا ہے اور آپ کے دیے گئے ہدف کو مکمل کرتا ہے۔ مثال کے طور پر ویڈیو بنانا، ای میل بھیجنا اور ڈیٹا کا تجزیہ کرنا اب اے آئی ایجنٹس خود کر سکتے ہیں۔ مستقبل میں یہ ٹیکنالوجی ہر کاروبار کا لازمی حصہ بن جائے گی۔ مزید اے آئی معلومات کے لیے اے آئی ود عامر کے ساتھ جڑے رہیں۔ شکریہ!"
+    },
+    {
+        "title": "YouTube Automation With Free AI Tools Complete Guide in Urdu",
+        "urdu": "السلام علیکم دوستو! اے آئی ود عامر میں خوش آمدید۔ آج ہم آپ کو بتائیں گے کہ آپ سو فیصد مفت اے آئی ٹولز کے ذریعے یوٹیوب آٹومیشن چینل کیسے بنا سکتے ہیں۔ سب سے پہلے آپ کو ایک اچھا موضوع منتخب کرنا ہوتا ہے، اس کے بعد اردو سکرپٹ تیار کیا جاتا ہے اور پھر اے آئی آواز اور تصاویر کو جوڑ کر مکمل ویڈیو بنائی جاتی ہے۔ یوٹیوب کی پالیسی کے مطابق اگر آپ کی ویڈیو میں اصل آواز اور مفید معلومات شامل ہوں تو آپ کا چینل باآسانی مونیٹائز ہو سکتا ہے۔ مزید رہنمائی کے لیے سبسکرائب کرنا نہ بھولیں۔ شکریہ!"
+    },
+    {
+        "title": "Mobile Phone Par Free AI Apps Se Content Creation Kaise Karein",
+        "urdu": "السلام علیکم دوستو! اے آئی ود عامر میں خوش آمدید۔ اگر آپ کے پاس کمپیوٹر یا لیپ ٹاپ نہیں ہے تو پریشان ہونے کی بالکل ضرورت نہیں ہے۔ آج ہم آپ کو بتائیں گے کہ صرف اپنے اینڈرائیڈ موبائل فون پر مفت اے آئی ایپس استعمال کر کے بہترین ویڈیوز اور ڈیزائن کیسے بنائے جا سکتے ہیں۔ موبائل پر سکرپٹ لکھنے سے لے کر آواز ریکارڈ کرنے اور ایڈیٹنگ تک تمام کام چند منٹوں میں مکمل ہو جاتے ہیں۔ آج ہی اپنا ڈیجیٹل سفر شروع کریں اور اے آئی ود عامر کو سبسکرائب کریں۔ شکریہ!"
+    }
 ]
 
 def load_used_topics():
@@ -43,17 +48,21 @@ def save_used_topic(topic):
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(used, f, ensure_ascii=False, indent=2)
 
-def pick_unique_topic():
+def pick_unique_item():
     if MANUAL_TOPIC:
-        return MANUAL_TOPIC
+        return {"title": MANUAL_TOPIC, "urdu": TOPIC_ITEMS[0]["urdu"]}
     used = load_used_topics()
-    available = [t for t in TOPIC_POOL if t not in used]
+    available = [item for item in TOPIC_ITEMS if item["title"] not in used]
     if not available:
         used = []
-        available = TOPIC_POOL[:]
+        available = TOPIC_ITEMS[:]
     chosen = random.choice(available)
-    save_used_topic(chosen)
+    save_used_topic(chosen["title"])
     return chosen
+
+def has_urdu_script(text):
+    urdu_chars = re.findall(r'[\u0600-\u06FF]', text)
+    return len(urdu_chars) >= 40
 
 def get_dify_input_var():
     try:
@@ -67,15 +76,14 @@ def get_dify_input_var():
                 for field_type in ["text-input", "paragraph", "select"]:
                     if field_type in item:
                         return item[field_type].get("variable", "topic")
-    except Exception as e:
-        print(f"Parameter lookup fallback: {e}")
+    except Exception:
+        pass
     return "topic"
 
 def run_dify_workflow(topic):
     if not DIFY_API_KEY:
         return None
     var_name = get_dify_input_var()
-    print(f"Calling Dify Workflow with variable '{var_name}' = '{topic}'")
     payload = {
         "inputs": {var_name: topic},
         "response_mode": "blocking",
@@ -93,11 +101,9 @@ def run_dify_workflow(topic):
     try:
         with urllib.request.urlopen(req, timeout=180) as resp:
             result = json.loads(resp.read().decode("utf-8"))
-            outputs = result.get("data", {}).get("outputs", {})
-            print("Dify outputs keys:", list(outputs.keys()))
-            return outputs
+            return result.get("data", {}).get("outputs", {})
     except Exception as e:
-        print(f"Dify API error (activating Self-Healing fallback): {e}")
+        print(f"Dify API fallback triggered: {e}")
         return None
 
 def set_github_output(name, value):
@@ -108,45 +114,33 @@ def set_github_output(name, value):
             f.write(f"{name}<<{delimiter}\n{value}\n{delimiter}\n")
 
 def main():
-    topic = pick_unique_topic()
+    item = pick_unique_item()
+    topic = item["title"]
     print(f"Selected Unique Topic: {topic}")
     outputs = run_dify_workflow(topic)
 
     video_title = f"AI With Aamir - {topic}"
     urdu_script = ""
-    seo_text = f"Title: {video_title}\nDescription: {topic} ke baray mein mukammal maloomat AI With Aamir par.\nTags: AI With Aamir, AI in Urdu, Artificial Intelligence Pakistan, Online Earning"
+    seo_text = f"Title: {video_title}\nDescription: {topic} - Complete Urdu Guide by AI With Aamir.\nTags: AI With Aamir, AI in Urdu, Artificial Intelligence Pakistan, Online Earning"
 
     if outputs and isinstance(outputs, dict):
-        all_texts = [str(v) for v in outputs.values() if v]
         for k, v in outputs.items():
-            kl = k.lower()
             val = str(v).strip()
             if not val:
                 continue
-            if "script" in kl or "urdu" in kl or len(val) > 350:
-                if len(val) > len(urdu_script):
-                    urdu_script = val
-            if "seo" in kl or "title" in kl or "tag" in kl:
+            if has_urdu_script(val) and len(val) > len(urdu_script):
+                urdu_script = val
+            if "seo" in k.lower() or "title" in k.lower() or "tag" in k.lower():
                 seo_text = val
-        if not urdu_script and all_texts:
-            urdu_script = max(all_texts, key=len)
 
-    if len(urdu_script.strip()) < 80:
-        print("Using Self-Healing Urdu Script Generator...")
-        urdu_script = (
-            f"Assalam-o-Alaikum dosto! AI With Aamir mein khush amdeed. "
-            f"Aaj hum baat karenge {topic} ke baray mein. "
-            f"Aaj ke jadeed daur mein Artificial Intelligence ne zindagi ke har shobay ko badal kar rakh diya hai. "
-            f"Chahe aap student hon, freelancer hon ya apna karobar chala rahe hon, free AI tools ki madad se aap apna waqt bacha sakte hain aur apni aamdani mein izafa kar sakte hain. "
-            f"Sab se pehle aapko chahiye ke rozana kam az kam ek naya AI tool seekhein aur usay apne rozmarra ke kaam mein istemal karein. "
-            f"Is tarah aap bina kisi investment ke apni digital skills ko behtar bana sakte hain. "
-            f"Agar aapko yeh maloomat pasand aayi hon to AI With Aamir ko subscribe zaroor karein. Shukriya!"
-        )
+    if not has_urdu_script(urdu_script):
+        print("Self-Healing: Ensuring pure Urdu Nastaliq script for Agent 6 edge-tts...")
+        urdu_script = item["urdu"]
 
     set_github_output("video_title", video_title)
     set_github_output("urdu_script", urdu_script)
     set_github_output("seo_text", seo_text)
-    print("Agent 0 Autonomous Brain completed successfully!")
+    print("Agent 0 Autonomous Brain completed with pure Urdu script!")
 
 if __name__ == "__main__":
     main()
