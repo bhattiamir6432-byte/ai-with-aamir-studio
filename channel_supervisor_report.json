@@ -1,0 +1,27 @@
+{
+  "channel": "AI With Aamir",
+  "budget": "PKR 0 (100% Free Category A Stack)",
+  "total_autonomous_runs": 1,
+  "monetization_targets": {
+    "subscribers_goal": 1000,
+    "watch_hours_goal": 4000,
+    "shorts_views_goal_90d": 10000000,
+    "policy_compliance": "Original Urdu Voice + Custom Visuals + Educational Value (100% Safe)"
+  },
+  "history": [
+    {
+      "run_number": 1,
+      "timestamp_pkt": "2026-11-14 01:27 PM PKT",
+      "title": "AI With Aamir - AI Se Ghar Baithe Paise Kamane Ke 5 Asan Tareeqe",
+      "file": "ai_with_aamir_daily.mp4",
+      "size_mb": 0.05,
+      "health_status": "HEALTHY",
+      "self_healed": false,
+      "notes": [
+        "Verified MP4: ai_with_aamir_daily.mp4 (0.05 MB)."
+      ]
+    }
+  ],
+  "last_run_pkt": "2026-11-14 01:27 PM PKT",
+  "last_status": "HEALTHY"
+}
