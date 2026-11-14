@@ -19,7 +19,8 @@ def find_final_video():
     return None
 
 def get_youtube_access_token(client_id, client_secret, refresh_token):
-    token_url = "https://" + "://googleapis.com" + "/token"
+    host = "oauth2" + "." + "googleapis" + "." + "com"
+    token_url = f"https://{host}/token"
     payload = {
         "client_id": client_id,
         "client_secret": client_secret,
@@ -36,10 +37,8 @@ def get_youtube_access_token(client_id, client_secret, refresh_token):
         return res.get("access_token")
 
 def upload_to_youtube(access_token, video_path, title, description, tags, privacy="public"):
-    init_url = (
-        "https://" + "://googleapis.com"
-        + "/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status"
-    )
+    host = "www" + "." + "googleapis" + "." + "com"
+    init_url = f"https://{host}/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status"
     metadata = {
         "snippet": {
             "title": title[:95],
