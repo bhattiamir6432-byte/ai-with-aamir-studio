@@ -20,7 +20,9 @@ jobs:
         run: |
           python3 -c '
           import os, urllib.parse, urllib.request, json
-          cid = os.environ["CLIENT_ID"].strip()
+          raw_cid = os.environ["CLIENT_ID"].strip()
+          suffix = "." + "apps" + "." + "googleusercontent" + "." + "com"
+          cid = raw_cid if raw_cid.endswith(suffix) else raw_cid + suffix
           csec = os.environ["CLIENT_SECRET"].strip()
           code = os.environ["AUTH_CODE"].strip()
           redir = "http://localhost"
