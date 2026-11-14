@@ -1,22 +1,28 @@
-name: AI With Aamir - Full Video Production
+name: AI With Aamir - Autonomous Daily Studio
 
 on:
+  schedule:
+    # Rozana 7:00 PM PKT (14:00 UTC) par khud-ba-khud chalega
+    - cron: '0 14 * * *'
   repository_dispatch:
     types: [produce_youtube_video]
   workflow_dispatch:
     inputs:
       video_title:
-        description: 'Video Title'
+        description: 'Custom Topic / Video Title (Khali chhorein to khud topic chunega)'
         required: false
-        default: 'AI With Aamir - AI Se Paise Kamane Ke Tarike'
+        default: ''
       urdu_script:
-        description: 'Complete Urdu Script'
+        description: 'Custom Urdu Script (Optional)'
         required: false
-        default: 'السلام علیکم دوستو! AI With Aamir میں خوش آمدید۔ آج کی ویڈیو میں ہم سیکھیں گے کہ مصنوعی ذہانت سے یوٹیوب ویڈیوز کیسے بنائی جاتی ہیں۔ یہ پورا سسٹم بالکل مفت کام کرتا ہے۔'
+        default: ''
       video_format:
         description: 'Format: landscape or shorts'
         required: false
         default: 'landscape'
+
+permissions:
+  contents: write
 
 jobs:
   produce-video:
@@ -36,35 +42,57 @@ jobs:
           sudo apt-get install -y ffmpeg fonts-noto-core
 
       - name: Install Python Libraries
-        run: pip install edge-tts pillow arabic-reshaper python-bidi
+        run: pip install edge-tts pillow arabic-reshaper python-bidi google-api-python-client google-auth-oauthlib
+
+      - name: Run Agent 0 - Autonomous Topic Brain & Dify Connector
+        id: brain
+        env:
+          DIFY_API_KEY: ${{ secrets.DIFY_API_KEY }}
+          MANUAL_TOPIC: ${{ github.event.client_payload.video_title || github.event.inputs.video_title }}
+        run: python agent0_autonomous_brain.py
 
       - name: Run Agent 6 - Pakistani Urdu Voice
         env:
-          URDU_SCRIPT: ${{ github.event.client_payload.urdu_script || github.event.inputs.urdu_script }}
+          URDU_SCRIPT: ${{ github.event.client_payload.urdu_script || github.event.inputs.urdu_script || steps.brain.outputs.urdu_script }}
         run: python agent6_voice.py
 
       - name: Run Agent 7 - AI Visuals & Stock Clips
         env:
-          VIDEO_FORMAT: ${{ github.event.client_payload.video_format || github.event.inputs.video_format }}
+          VIDEO_FORMAT: ${{ github.event.client_payload.video_format || github.event.inputs.video_format || 'landscape' }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
         run: python agent7_visuals.py
 
       - name: Run Agent 8 & 9 - Video Editor, Urdu Subtitles & QC
         env:
-          VIDEO_FORMAT: ${{ github.event.client_payload.video_format || github.event.inputs.video_format }}
+          VIDEO_FORMAT: ${{ github.event.client_payload.video_format || github.event.inputs.video_format || 'landscape' }}
         run: python agent8_9_editor_qc.py
 
-      - name: Run Agent 10 - YouTube SEO & Private Upload
+      - name: Run Agent 11 & 12 - Self-Healing & Supervisor Tracker
         env:
-          VIDEO_TITLE: ${{ github.event.client_payload.video_title || github.event.inputs.video_title }}
-          SEO_TEXT: ${{ github.event.client_payload.seo_text }}
+          VIDEO_TITLE: ${{ steps.brain.outputs.video_title }}
+        run: python agent11_12_self_heal_supervisor.py
+
+      - name: Run Agent 10 - YouTube SEO & Upload
+        env:
+          VIDEO_TITLE: ${{ steps.brain.outputs.video_title }}
+          SEO_TEXT: ${{ github.event.client_payload.seo_text || steps.brain.outputs.seo_text }}
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
         run: python agent10_youtube.py
 
+      - name: Save Autonomous Memory & Supervisor Report
+        run: |
+          git config user.name "AI With Aamir Bot"
+          git config user.email "bot@aiwithaamir.local"
+          git add used_topics.json channel_supervisor_report.json || true
+          git commit -m "chore: update autonomous topic memory & supervisor report" || true
+          git push || true
+
       - name: Upload Final MP4 Video & Reports
         uses: actions/upload-artifact@v4
         with:
           name: ai-with-aamir-final-video
-          path: output/final/
+          path: |
+            output/final/
+            channel_supervisor_report.json
