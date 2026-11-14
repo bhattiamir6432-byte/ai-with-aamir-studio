@@ -1,0 +1,56 @@
+name: Get Permanent YouTube Refresh Token
+
+on:
+  workflow_dispatch:
+    inputs:
+      auth_code:
+        description: 'Step 2: Yahan Google wala code paste karein (Pehli baar khali chhorein)'
+        required: false
+        default: ''
+
+jobs:
+  get-token:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate Link or Exchange Code
+        env:
+          CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          AUTH_CODE: ${{ github.event.inputs.auth_code }}
+        run: |
+          python3 -c '
+          import os, urllib.parse, urllib.request, json
+          cid = os.environ["CLIENT_ID"].strip()
+          csec = os.environ["CLIENT_SECRET"].strip()
+          code = os.environ["AUTH_CODE"].strip()
+          redir = "http://localhost"
+          auth_host = "accounts" + "." + "google" + "." + "com"
+          tok_host = "oauth2" + "." + "googleapis" + "." + "com"
+          scope_url = "https://www" + "." + "googleapis" + "." + "com/auth/youtube.upload"
+          if not code:
+              params = urllib.parse.urlencode({
+                  "client_id": cid,
+                  "redirect_uri": redir,
+                  "response_type": "code",
+                  "scope": scope_url,
+                  "access_type": "offline",
+                  "prompt": "consent"
+              })
+              print("\n=== IS LINK KO CHROME MEIN KHOLEIN ===")
+              print(f"https://{auth_host}/o/oauth2/v2/auth?{params}")
+              print("========================================\n")
+          else:
+              data = urllib.parse.urlencode({
+                  "client_id": cid,
+                  "client_secret": csec,
+                  "code": code,
+                  "grant_type": "authorization_code",
+                  "redirect_uri": redir
+              }).encode("utf-8")
+              req = urllib.request.Request(f"https://{tok_host}/token", data=data, method="POST")
+              with urllib.request.urlopen(req) as resp:
+                  res = json.loads(resp.read().decode("utf-8"))
+                  print("\n=== AAPKA PERMANENT REFRESH TOKEN ===")
+                  print(res.get("refresh_token"))
+                  print("=====================================\n")
+          '
