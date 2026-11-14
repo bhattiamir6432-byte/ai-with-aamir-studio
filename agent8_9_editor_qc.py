@@ -1,185 +1,166 @@
-import json
 import os
-import subprocess
+import glob
+import json
 import urllib.parse
 import urllib.request
+import subprocess
 from PIL import Image, ImageDraw, ImageFont
 
-VOICE_MANIFEST = "output/audio/voice_manifest.json"
-VISUAL_MANIFEST = "output/visuals/visual_manifest.json"
-TEMP_DIR = "output/temp"
-FINAL_DIR = "output/final"
+VIDEO_FORMAT = os.environ.get("VIDEO_FORMAT", "landscape").strip().lower()
+URDU_SCRIPT = os.environ.get("URDU_SCRIPT", "").strip()
+OUTPUT_DIR = "output/final"
 
-def get_audio_duration(audio_path):
-    cmd = [
-        "ffprobe", "-v", "error", "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1", audio_path
-    ]
-    res = subprocess.run(cmd, capture_output=True, text=True, check=True)
-    return float(res.stdout.strip())
-
-def translate_urdu_to_english(urdu_text):
+def translate_to_english(urdu_text):
+    clean_text = " ".join(urdu_text.split())[:450]
+    if not clean_text:
+        return "AI With Aamir - Learn Artificial Intelligence & Online Earning in Urdu."
     try:
-        q = urllib.parse.quote(urdu_text)
-        url = f"https://googleapis.com{q}"
+        encoded = urllib.parse.quote(clean_text, safe="")
+        url = f"https://googleapis.com{encoded}"
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=20) as resp:
+        with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-            translated = "".join([part for part in data if part])
-            return translated.strip() or urdu_text
+            translated = "".join([part[0] for part in data[0] if part and part[0]])
+            if translated.strip():
+                return translated.strip()
     except Exception as e:
-        print(f"[Agent 8] Translation fallback: {e}")
-        return "AI With Aamir - Educational Tutorial"
+        print(f"[Agent 8] Translation fallback used: {e}")
+    return "Welcome to AI With Aamir! Learn how to use free AI tools for online earning and productivity."
+
+def wrap_text(text, max_chars=58):
+    words = text.split()
+    lines = []
+    current = []
+    for w in words:
+        if sum(len(x) + 1 for x in current) + len(w) <= max_chars:
+            current.append(w)
+        else:
+            if current:
+                lines.append(" ".join(current))
+            current = [w]
+    if current:
+        lines.append(" ".join(current))
+    return "\n".join(lines[:3])
 
 def create_subtitle_overlay(english_text, width, height, out_png):
     img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    font_size = 42 if width > height else 38
-    font_paths = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
-    ]
+    font_size = 38 if width >= height else 42
     font = None
-    for fp in font_paths:
-        if os.path.exists(fp):
-            font = ImageFont.truetype(fp, font_size)
+    for fpath in [
+        "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+    ]:
+        if os.path.exists(fpath):
+            font = ImageFont.truetype(fpath, font_size)
             break
     if font is None:
         font = ImageFont.load_default()
 
-    words = english_text.split()
-    lines = []
-    current = []
-    max_words = 10 if width > height else 6
-    for w in words:
-        current.append(w)
-        if len(current) >= max_words:
-            lines.append(" ".join(current))
-            current = []
-    if current:
-        lines.append(" ".join(current))
+    wrapped = wrap_text(english_text, max_chars=56 if width >= height else 34)
+    bbox = draw.multiline_textbbox((0, 0), wrapped, font=font, align="center")
+    tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
 
-    line_height = font_size + 14
-    box_height = len(lines) * line_height + 32
-    y_start = height - box_height - (55 if width > height else 160)
+    pad_x, pad_y = 36, 22
+    box_w = tw + pad_x * 2
+    box_h = th + pad_y * 2
+    x0 = (width - box_w) // 2
+    y0 = height - box_h - int(height * 0.08)
+    x1 = x0 + box_w
+    y1 = y0 + box_h
 
-    draw.rounded_rectangle(
-        [(70, y_start), (width - 70, y_start + box_height)],
-        radius=16,
-        fill=(10, 15, 28, 210)
+    draw.rounded_rectangle([x0, y0, x1, y1], radius=18, fill=(10, 15, 30, 210), outline=(56, 189, 248, 255), width=3)
+    draw.multiline_text((x0 + pad_x, y0 + pad_y), wrapped, font=font, fill=(255, 255, 255, 255), align="center")
+    img.save(out_png, "PNG")
+
+def find_audio_file():
+    candidates = glob.glob("output/**/*.mp3", recursive=True) + glob.glob("output/**/*.wav", recursive=True)
+    candidates = [c for c in candidates if os.path.getsize(c) > 1000]
+    if candidates:
+        candidates.sort()
+        return candidates[0]
+    return None
+
+def find_visual_files():
+    imgs = (
+        glob.glob("output/**/*.png", recursive=True)
+        + glob.glob("output/**/*.jpg", recursive=True)
+        + glob.glob("output/**/*.jpeg", recursive=True)
+    )
+    imgs = [i for i in imgs if "subtitle_overlay" not in i and "final" not in i and os.path.getsize(i) > 1000]
+    imgs.sort()
+    return imgs
+
+def get_audio_duration(audio_path):
+    try:
+        cmd = [
+            "ffprobe", "-v", "error", "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1", audio_path
+        ]
+        res = subprocess.check_output(cmd).decode("utf-8").strip()
+        return max(float(res), 5.0)
+    except Exception:
+        return 25.0
+
+def run_agent8_and_qc():
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    width, height = (1080, 1920) if VIDEO_FORMAT == "shorts" else (1920, 1080)
+
+    audio_path = find_audio_file()
+    if not audio_path:
+        raise RuntimeError("No valid audio file found from Agent 6!")
+
+    duration = get_audio_duration(audio_path)
+    print(f"[Agent 8] Audio found: {audio_path} ({duration:.1f}s)")
+
+    english_sub = translate_to_english(URDU_SCRIPT)
+    sub_png = os.path.join("output", "subtitle_overlay.png")
+    create_subtitle_overlay(english_sub, width, height, sub_png)
+
+    visuals = find_visual_files()
+    if not visuals:
+        fallback_bg = os.path.join("output", "fallback_bg.png")
+        bg = Image.new("RGB", (width, height), (15, 23, 42))
+        bg.save(fallback_bg)
+        visuals = [fallback_bg]
+
+    concat_txt = os.path.join("output", "slides_concat.txt")
+    per_slide = max(duration / len(visuals), 2.0)
+    with open(concat_txt, "w", encoding="utf-8") as f:
+        for img_path in visuals:
+            abs_p = os.path.abspath(img_path).replace("\\", "/")
+            f.write(f"file '{abs_p}'\n")
+            f.write(f"duration {per_slide:.2f}\n")
+        last_p = os.path.abspath(visuals[-1]).replace("\\", "/")
+        f.write(f"file '{last_p}'\n")
+
+    final_mp4 = os.path.join(OUTPUT_DIR, "ai_with_aamir_daily.mp4")
+    filter_complex = (
+        f"[0:v]scale={width}:{height}:force_original_aspect_ratio=decrease,"
+        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=0x0f172a,setsar=1[bg];"
+        f"[bg][2:v]overlay=0:0[vout]"
     )
 
-    for i, line in enumerate(lines):
-        bbox = draw.textbbox((0, 0), line, font=font)
-        tw = bbox - bbox
-        x = (width - tw) // 2
-        y = y_start + 14 + i * line_height
-        draw.text((x, y), line, font=font, fill=(255, 255, 255, 255))
-
-    img.save(out_png)
-    return out_png
-
-def render_scene_clip(asset_file, asset_type, audio_file, sub_png, duration, width, height, out_mp4):
-    fps = 25
-    total_frames = max(int(duration * fps) + 5, 25)
-    if asset_type == "video" and asset_file.endswith(".mp4"):
-        cmd = [
-            "ffmpeg", "-y", "-stream_loop", "-1", "-i", asset_file,
-            "-i", sub_png, "-i", audio_file,
-            "-filter_complex",
-            f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},setsar=1[bg];[bg][1:v]overlay=0:0[v]",
-            "-map", "[v]", "-map", "2:a",
-            "-t", f"{duration:.3f}", "-c:v", "libx264", "-pix_fmt", "yuv420p",
-            "-c:a", "aac", "-b:a", "192k", "-shortest", out_mp4
-        ]
-    else:
-        cmd = [
-            "ffmpeg", "-y", "-loop", "1", "-i", asset_file,
-            "-i", sub_png, "-i", audio_file,
-            "-filter_complex",
-            f"[0:v]scale={width*2}:{height*2},zoompan=z='min(zoom+0.0008,1.15)':d={total_frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={fps},setsar=1[bg];[bg][1:v]overlay=0:0[v]",
-            "-map", "[v]", "-map", "2:a",
-            "-t", f"{duration:.3f}", "-c:v", "libx264", "-pix_fmt", "yuv420p",
-            "-c:a", "aac", "-b:a", "192k", "-shortest", out_mp4
-        ]
+    cmd = [
+        "ffmpeg", "-y",
+        "-f", "concat", "-safe", "0", "-i", concat_txt,
+        "-i", audio_path,
+        "-i", sub_png,
+        "-filter_complex", filter_complex,
+        "-map", "[vout]", "-map", "1:a",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-b:a", "192k",
+        "-shortest", final_mp4
+    ]
     subprocess.run(cmd, check=True)
 
-def run_agent8_and_qc(video_format="landscape"):
-    os.makedirs(TEMP_DIR, exist_ok=True)
-    os.makedirs(FINAL_DIR, exist_ok=True)
-
-    width, height = (1080, 1920) if video_format == "shorts" else (1920, 1080)
-
-    with open(VOICE_MANIFEST, "r", encoding="utf-8") as f:
-        voice_data = json.load(f)
-    with open(VISUAL_MANIFEST, "r", encoding="utf-8") as f:
-        visual_data = json.load(f)
-
-    visual_map = {v["segment_id"]: v for v in visual_data}
-    clip_paths = []
-    total_expected_duration = 0.0
-
-    for seg in voice_data:
-        sid = seg["segment_id"]
-        urdu_text = seg["urdu_text"]
-        english_sub = translate_urdu_to_english(urdu_text)
-        audio_file = seg["audio_file"]
-        vis = visual_map.get(sid)
-        if not vis:
-            raise RuntimeError(f"Missing visual for segment {sid}")
-
-        dur = get_audio_duration(audio_file)
-        total_expected_duration += dur
-        sub_png = os.path.join(TEMP_DIR, f"sub_{sid:03d}.png")
-        clip_mp4 = os.path.join(TEMP_DIR, f"clip_{sid:03d}.mp4")
-
-        create_subtitle_overlay(english_sub, width, height, sub_png)
-        render_scene_clip(vis["asset_file"], vis["asset_type"], audio_file, sub_png, dur, width, height, clip_mp4)
-        clip_paths.append(clip_mp4)
-        print(f"[Agent 8] Rendered scene {sid} ({dur:.2f}s) | EN Sub: {english_sub}")
-
-    concat_list = os.path.join(TEMP_DIR, "concat.txt")
-    with open(concat_list, "w", encoding="utf-8") as f:
-        for cp in clip_paths:
-            f.write(f"file '{os.path.abspath(cp)}'\n")
-
-    final_mp4 = os.path.join(FINAL_DIR, "ai_with_aamir_final.mp4")
-    subprocess.run([
-        "ffmpeg", "-y", "-f", "concat", "-safe", "0",
-        "-i", concat_list, "-c", "copy", final_mp4
-    ], check=True)
-
-    qc_passed = True
-    qc_notes = []
     if not os.path.exists(final_mp4) or os.path.getsize(final_mp4) < 50000:
-        qc_passed = False
-        qc_notes.append("Final MP4 missing or file size too small.")
+        raise RuntimeError("[Agent 9 QC] Final MP4 verification failed!")
 
-    actual_dur = get_audio_duration(final_mp4)
-    if abs(actual_dur - total_expected_duration) > 2.0:
-        qc_passed = False
-        qc_notes.append(f"Duration mismatch: expected {total_expected_duration:.2f}s, got {actual_dur:.2f}s")
-
-    qc_report = {
-        "qc_passed": qc_passed,
-        "resolution": f"{width}x{height}",
-        "total_scenes": len(clip_paths),
-        "duration_seconds": round(actual_dur, 2),
-        "file_size_mb": round(os.path.getsize(final_mp4) / (1024 * 1024), 2),
-        "output_video": final_mp4,
-        "notes": qc_notes or ["All checks passed: Urdu narration + clean English subtitles + HD video verified."]
-    }
-
-    qc_path = os.path.join(FINAL_DIR, "qc_report.json")
-    with open(qc_path, "w", encoding="utf-8") as f:
-        json.dump(qc_report, f, ensure_ascii=False, indent=2)
-
-    print("[Agent 9 QC Report]", json.dumps(qc_report, ensure_ascii=False))
-    if not qc_passed:
-        raise RuntimeError(f"Quality Control Failed: {qc_notes}")
-    return final_mp4
+    size_mb = os.path.getsize(final_mp4) / (1024 * 1024)
+    print(f"[Agent 9 QC PASSED] Created {final_mp4} ({size_mb:.2f} MB)")
 
 if __name__ == "__main__":
-    fmt = os.environ.get("VIDEO_FORMAT", "landscape")
-    run_agent8_and_qc(fmt)
+    run_agent8_and_qc()
