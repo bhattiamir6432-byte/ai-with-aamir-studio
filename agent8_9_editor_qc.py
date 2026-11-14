@@ -1,4 +1,5 @@
 import os
+import re
 import glob
 import json
 import urllib.parse
@@ -10,12 +11,17 @@ VIDEO_FORMAT = os.environ.get("VIDEO_FORMAT", "landscape").strip().lower()
 URDU_SCRIPT = os.environ.get("URDU_SCRIPT", "").strip()
 OUTPUT_DIR = "output/final"
 
-def translate_to_english(urdu_text):
-    clean_text = " ".join(urdu_text.split())[:450]
-    if not clean_text:
-        return "AI With Aamir - Learn Artificial Intelligence & Online Earning in Urdu."
+def split_urdu_sentences(text):
+    clean = " ".join(text.split())
+    if not clean:
+        return ["Welcome to AI With Aamir!"]
+    parts = re.split(r'[۔!?؟\.\n]+', clean)
+    sentences = [p.strip() for p in parts if len(p.strip()) > 3]
+    return sentences if sentences else [clean]
+
+def translate_sentence_to_english(urdu_sentence):
     try:
-        encoded = urllib.parse.quote(clean_text, safe="")
+        encoded = urllib.parse.quote(urdu_sentence[:300], safe="")
         url = f"https://googleapis.com{encoded}"
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=15) as resp:
@@ -24,10 +30,10 @@ def translate_to_english(urdu_text):
             if translated.strip():
                 return translated.strip()
     except Exception as e:
-        print(f"[Agent 8] Translation fallback used: {e}")
-    return "Welcome to AI With Aamir! Learn how to use free AI tools for online earning and productivity."
+        print(f"[Agent 8] Subtitle translation fallback: {e}")
+    return "Learn Artificial Intelligence & Online Earning with AI With Aamir."
 
-def wrap_text(text, max_chars=58):
+def wrap_text(text, max_chars=54):
     words = text.split()
     lines = []
     current = []
@@ -42,7 +48,7 @@ def wrap_text(text, max_chars=58):
         lines.append(" ".join(current))
     return "\n".join(lines[:3])
 
-def create_subtitle_overlay(english_text, width, height, out_png):
+def create_subtitle_png(english_text, width, height, out_png):
     img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
@@ -58,20 +64,20 @@ def create_subtitle_overlay(english_text, width, height, out_png):
     if font is None:
         font = ImageFont.load_default()
 
-    wrapped = wrap_text(english_text, max_chars=56 if width >= height else 34)
+    wrapped = wrap_text(english_text, max_chars=54 if width >= height else 32)
     bbox = draw.multiline_textbbox((0, 0), wrapped, font=font, align="center")
     tw = bbox[2] - bbox[0]
     th = bbox[3] - bbox[1]
 
-    pad_x, pad_y = 36, 22
+    pad_x, pad_y = 34, 20
     box_w = tw + pad_x * 2
     box_h = th + pad_y * 2
     x0 = (width - box_w) // 2
-    y0 = height - box_h - int(height * 0.08)
+    y0 = height - box_h - int(height * 0.07)
     x1 = x0 + box_w
     y1 = y0 + box_h
 
-    draw.rounded_rectangle([x0, y0, x1, y1], radius=18, fill=(10, 15, 30, 210), outline=(56, 189, 248, 255), width=3)
+    draw.rounded_rectangle([x0, y0, x1, y1], radius=16, fill=(10, 15, 30, 220), outline=(56, 189, 248, 255), width=3)
     draw.multiline_text((x0 + pad_x, y0 + pad_y), wrapped, font=font, fill=(255, 255, 255, 255), align="center")
     img.save(out_png, "PNG")
 
@@ -89,7 +95,7 @@ def find_visual_files():
         + glob.glob("output/**/*.jpg", recursive=True)
         + glob.glob("output/**/*.jpeg", recursive=True)
     )
-    imgs = [i for i in imgs if "subtitle_overlay" not in i and "final" not in i and os.path.getsize(i) > 1000]
+    imgs = [i for i in imgs if "sub_" not in os.path.basename(i) and "final" not in i and os.path.getsize(i) > 1000]
     imgs.sort()
     return imgs
 
@@ -115,9 +121,20 @@ def run_agent8_and_qc():
     duration = get_audio_duration(audio_path)
     print(f"[Agent 8] Audio found: {audio_path} ({duration:.1f}s)")
 
-    english_sub = translate_to_english(URDU_SCRIPT)
-    sub_png = os.path.join("output", "subtitle_overlay.png")
-    create_subtitle_overlay(english_sub, width, height, sub_png)
+    urdu_sentences = split_urdu_sentences(URDU_SCRIPT)
+    english_subs = [translate_sentence_to_english(s) for s in urdu_sentences]
+    print(f"[Agent 8] Generated {len(english_subs)} synced English subtitle segments.")
+
+    total_chars = sum(max(len(s), 1) for s in urdu_sentences)
+    sub_items = []
+    cur_t = 0.0
+    for idx, (u_s, e_s) in enumerate(zip(urdu_sentences, english_subs)):
+        seg_dur = duration * (max(len(u_s), 1) / total_chars)
+        end_t = duration if idx == len(urdu_sentences) - 1 else cur_t + seg_dur
+        png_path = os.path.join("output", f"sub_{idx}.png")
+        create_subtitle_png(e_s, width, height, png_path)
+        sub_items.append((png_path, cur_t, end_t))
+        cur_t = end_t
 
     visuals = find_visual_files()
     if not visuals:
@@ -137,30 +154,42 @@ def run_agent8_and_qc():
         f.write(f"file '{last_p}'\n")
 
     final_mp4 = os.path.join(OUTPUT_DIR, "ai_with_aamir_daily.mp4")
-    filter_complex = (
-        f"[0:v]scale={width}:{height}:force_original_aspect_ratio=decrease,"
-        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=0x0f172a,setsar=1[bg];"
-        f"[bg][2:v]overlay=0:0[vout]"
-    )
 
     cmd = [
         "ffmpeg", "-y",
         "-f", "concat", "-safe", "0", "-i", concat_txt,
-        "-i", audio_path,
-        "-i", sub_png,
-        "-filter_complex", filter_complex,
-        "-map", "[vout]", "-map", "1:a",
+        "-i", audio_path
+    ]
+    for png_path, _, _ in sub_items:
+        cmd.extend(["-i", png_path])
+
+    filter_parts = [
+        f"[0:v]scale={width}:{height}:force_original_aspect_ratio=decrease,"
+        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=0x0f172a,setsar=1[v0]"
+    ]
+    last_label = "v0"
+    for idx, (_, st, et) in enumerate(sub_items):
+        in_idx = idx + 2
+        next_label = f"v{idx + 1}"
+        filter_parts.append(
+            f"[{last_label}][{in_idx}:v]overlay=0:0:enable='between(t,{st:.2f},{et:.2f})'[{next_label}]"
+        )
+        last_label = next_label
+
+    cmd.extend([
+        "-filter_complex", ";".join(filter_parts),
+        "-map", f"[{last_label}]", "-map", "1:a",
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "192k",
         "-shortest", final_mp4
-    ]
+    ])
     subprocess.run(cmd, check=True)
 
     if not os.path.exists(final_mp4) or os.path.getsize(final_mp4) < 50000:
         raise RuntimeError("[Agent 9 QC] Final MP4 verification failed!")
 
     size_mb = os.path.getsize(final_mp4) / (1024 * 1024)
-    print(f"[Agent 9 QC PASSED] Created {final_mp4} ({size_mb:.2f} MB)")
+    print(f"[Agent 9 QC PASSED] Created {final_mp4} ({size_mb:.2f} MB) with synced English subtitles!")
 
 if __name__ == "__main__":
     run_agent8_and_qc()
