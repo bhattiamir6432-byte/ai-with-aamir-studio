@@ -62,9 +62,10 @@ jobs:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
         run: python agent7_visuals.py
 
-      - name: Run Agent 8 & 9 - Video Editor, Urdu Subtitles & QC
+      - name: Run Agent 8 & 9 - Video Editor, Synced English Subtitles & QC
         env:
           VIDEO_FORMAT: ${{ github.event.client_payload.video_format || github.event.inputs.video_format || 'landscape' }}
+          URDU_SCRIPT: ${{ github.event.client_payload.urdu_script || github.event.inputs.urdu_script || steps.brain.outputs.urdu_script }}
         run: python agent8_9_editor_qc.py
 
       - name: Run Agent 11 & 12 - Self-Healing & Supervisor Tracker
